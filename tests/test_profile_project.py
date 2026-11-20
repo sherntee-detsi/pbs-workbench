@@ -57,7 +57,7 @@ class ProfileProjectTests(unittest.TestCase):
             profile = self.save_profile(editor, directory)
             config = json.loads(profile.read_text())
             self.assertEqual(config["project"], "abc123")
-            self.assertEqual(config["resources"]["storage"], ["scratch/abc123", "gdata/abc123"])
+            self.assertNotIn("storage", config["resources"])
             with patch("job.places.logs_folder", return_value=directory):
                 script = Path(workbench.jobscript_from_json(str(profile), "workbench"))
             self.addCleanup(script.unlink, missing_ok=True)

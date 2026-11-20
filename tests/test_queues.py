@@ -54,14 +54,16 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("PBS unavailable", result.output)
 
-    def test_editor_uses_pbs_queues_and_scrolls(self):
+    def test_editor_uses_pbs_queues_and_browses_horizontally(self):
         queues = [f"queue{i}" for i in range(8)]
         editor = profile_editor.ProfileEditor({"name": "default"}, queues)
         self.assertEqual(editor.queue.get_value(), "queue0")
         for _ in range(6):
-            editor.queue_list.keypress((40, 4), "down")
-        editor.queue_list.keypress((40, 4), " ")
+            editor.queue.keypress((40,), "right")
         self.assertEqual(editor.queue.get_value(), "queue6")
+        editor.queue.keypress((40,), "left")
+        self.assertEqual(editor.queue.get_value(), "queue5")
+        editor.queue.keypress((40,), "right")
         with tempfile.TemporaryDirectory() as directory:
             with patch("job.places.profile_folder", return_value=directory):
                 with self.assertRaises(urwid.ExitMainLoop):

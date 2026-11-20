@@ -7,6 +7,7 @@ from job import places as ps
 
 PALETTE = [
     ("label", "light gray", "default"),
+    ("queue focus", "black", "light gray"),
 ]
 PROJECT = os.environ.get("PROJECT", "")
 
@@ -16,8 +17,8 @@ DEFAULT_CONFIG = {
         "ncpus": "8",
         "mem": "32GB",
         "walltime": "8:00:00",
-        "jobfs": "200GB",
-        "storage": [f"scratch/{PROJECT}", f"gdata/{PROJECT}"] if PROJECT else [],
+        "jobfs": "",
+        "storage": [],
     },
 }
 
@@ -54,36 +55,29 @@ def Table(rows_data):
     return uw.Padding(uw.Pile(rows), align="right", left=1)
 
 
-class RadioButtonEnter(uw.RadioButton):
-    def keypress(self, size, key):
-        if key == "enter":
-            super().keypress(size, " ")
-            return "down"
-        return super().keypress(size, key)
-
-
-class RadioButtonGroup:
+class QueueSelector(uw.WidgetWrap):
     def __init__(self, options, default=None):
-        group = []
-        if default not in options:
-            default = options[0]
+        self.options = options
+        self.index = options.index(default) if default in options else 0
+        self.text = uw.Text("")
+        super().__init__(uw.AttrMap(self.text, None, "queue focus"))
+        self.update_text()
 
-        for option in options:
-            RadioButtonEnter(group, option, state=(option == default))
+    def selectable(self):
+        return True
 
-        self.group = group
-        self.default = default
+    def update_text(self):
+        self.text.set_text(f"< {self.get_value()} >  (left/right)")
 
-    def __iter__(self):
-        for button in self.group:
-            yield button
+    def keypress(self, size, key):
+        if key in ("left", "right"):
+            self.index = (self.index + (1 if key == "right" else -1)) % len(self.options)
+            self.update_text()
+            return None
+        return key
 
     def get_value(self):
-        for rb in self.group:
-            if rb.state:
-                return rb.label
-
-        return self.default
+        return self.options[self.index]
 
 
 class EditEnter(uw.Edit):
@@ -117,6 +111,7 @@ class TabbedPile(uw.Pile):
 class ProfileEditor:
     def __init__(self, config: dict, queues: list[str]):
         self.exit_message = None
+        self.advanced = False
         resources = config.get("resources", DEFAULT_CONFIG["resources"])
         self.saved_project = config.get("project")
 
@@ -142,32 +137,44 @@ class ProfileEditor:
         saved_queue = config.get("queue")
         missing_queue = saved_queue and saved_queue not in queues
         queue_options = [*queues, saved_queue] if missing_queue else queues
-        self.queue = RadioButtonGroup(options=queue_options, default=saved_queue)
-        self.queue_list = uw.ListBox(uw.SimpleFocusListWalker(list(self.queue)))
-        self.queue_list.focus_position = queue_options.index(self.queue.get_value())
-        queue_widgets = [
-            uw.BoxAdapter(self.queue_list, min(len(queue_options), 4)),
-            uw.Text("Up/down to browse; space or enter to select"),
-        ]
+        self.queue = QueueSelector(options=queue_options, default=saved_queue)
+        queue_widgets = [self.queue]
         if missing_queue:
             queue_widgets.append(uw.Text("Saved queue is not currently reported by PBS."))
-        queue_column = uw.Pile(queue_widgets)
+        self.queue_column = uw.Pile(queue_widgets)
 
         btn_save = uw.Button("Save")
+        self.btn_advanced = uw.Button("Advanced", on_press=self.toggle_advanced)
         btn_quit = uw.Button("Quit")
         uw.connect_signal(btn_save, "click", lambda _: self.save())
         uw.connect_signal(btn_quit, "click", lambda _: self.quit())
 
         buttons = uw.Padding(
-            uw.Columns([("pack", btn_save), ("pack", btn_quit)], dividechars=4), left=2
+            uw.Columns(
+                [("pack", btn_save), ("pack", self.btn_advanced), ("pack", btn_quit)],
+                dividechars=4,
+            ),
+            left=2,
         )
 
         div = uw.Divider("─")
         header = [div, uw.Text("PBS Workbench Profile Editor", align="center"), div]
 
+        self.body = Table(self.profile_rows())
+
+        ui = []
+        ui.extend(header)
+        ui.append(self.body)
+        ui.append(div)
+        ui.append(buttons)
+
+        self.ui = uw.Filler(TabbedPile(ui), "top")
+        self.loop = uw.MainLoop(self.ui, palette=PALETTE)
+
+    def profile_rows(self):
         rows = [
             WithLabel("Name:", self.name),
-            WithLabel("Queue:", queue_column),
+            WithLabel("Queue:", self.queue_column),
         ]
         if self.project is not None:
             rows.append(WithLabel("Project:", self.project))
@@ -175,19 +182,18 @@ class ProfileEditor:
             WithLabel("CPUs:", self.ncpus),
             WithLabel("RAM:", self.mem),
             WithLabel("Walltime:", self.walltime),
-            WithLabel("Jobfs:", self.jobfs),
-            WithLabel("Storage:", self.storage),
         ])
-        body = Table(rows)
+        if self.advanced:
+            rows.extend([
+                WithLabel("Jobfs:", self.jobfs),
+                WithLabel("Storage:", self.storage),
+            ])
+        return rows
 
-        ui = []
-        ui.extend(header)
-        ui.append(body)
-        ui.append(div)
-        ui.append(buttons)
-
-        self.ui = uw.Filler(TabbedPile(ui), "top")
-        self.loop = uw.MainLoop(self.ui, palette=PALETTE)
+    def toggle_advanced(self, button):
+        self.advanced = not self.advanced
+        button.set_label("Hide advanced" if self.advanced else "Advanced")
+        self.body.original_widget = Table(self.profile_rows()).original_widget
 
     def save(self, force=False):
         filename = self.name.get_edit_text() + ".json"
@@ -254,13 +260,15 @@ class ProfileEditor:
                 "ncpus": self.ncpus.get_edit_text(),
                 "mem": self.mem.get_edit_text(),
                 "walltime": self.walltime.get_edit_text(),
-                "jobfs": self.jobfs.get_edit_text(),
             },
         }
         project = self.project.get_edit_text() if self.project is not None else self.saved_project
         if project:
             config["project"] = project
-        storage = self.storage.get_edit_text()
+        jobfs = self.jobfs.get_edit_text().strip()
+        if jobfs:
+            config["resources"]["jobfs"] = jobfs
+        storage = self.storage.get_edit_text().strip()
         if storage:
             config["resources"]["storage"] = storage.split("+")
 

@@ -85,25 +85,19 @@ This will open the Profile Editor with some defaults.
                               PBS Workbench Profile Editor
 ───────────────────────────────────────────────────────────────────────────────────────
  Name:     default
- Queue:    (X) normal
-           ( ) normalbw
-           ( ) bigmem
-           ( ) bigmembw
-           Up/down to browse; space or enter to select
+ Queue:    < normal >  (left/right)
  Project:  lo70
  CPUs:     8
  RAM:      32GB
  Walltime: 8:00:00
- Jobfs:    200GB
- Storage:  scratch/lo70+gdata/lo70
 ───────────────────────────────────────────────────────────────────────────────────────
-  < Save >    < Quit >
+  < Save >    < Advanced >    < Quit >
 ```
 
 Use the UI to configure job requirements (CPUs, memory, walltime, etc.). 
-The queue choices come from PBS; scroll the list with the arrow keys and select
-with Space or Enter. A saved queue no longer reported by PBS remains selected
-and is marked in the editor.
+The queue choices come from PBS; use left and right to select a queue. A saved
+queue no longer reported by PBS remains selected and is marked in the editor.
+Jobfs and Storage are optional and initially empty; use Advanced to edit them.
 If you want to create more than one profile, you can run `job profile profile_name` to create a new profile with a name "profile_name".
 If profile_name already exists, this will let you edit it. 
 
