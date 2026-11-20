@@ -77,8 +77,11 @@ job profile
 ```
 
 In **Job**, choose the PBS queue with left/right and set the requested
-resources. Optional Jobfs and Storage entries are under **Advanced**. In
-**Container**:
+resources. For a new profile, `PBS_WORKBENCH_DEFAULT_QUEUE` selects the
+default queue if PBS reports it; when unset, `juptq` is preferred. If the
+preferred queue is unavailable, the first alphabetical queue is selected.
+Saved profiles retain their queue. Optional Jobfs and Storage entries are
+under **Advanced**. In **Container**:
 
 1. Set **Image** to a SIF path accessible on the compute node, or a registry
    URI. The available image for this cluster is:

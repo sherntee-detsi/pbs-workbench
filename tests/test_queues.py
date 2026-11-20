@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -82,6 +83,33 @@ class QueueTests(unittest.TestCase):
         canvas = b"\n".join(editor.ui.render((100, 25)).text)
         self.assertIn(b"old-queue", canvas)
         self.assertIn(b"not currently reported", canvas)
+
+    def test_default_queue_selection(self):
+        queues = ["batch", "gpu", "juptq"]
+        cases = [
+            (None, queues, "juptq"),
+            (None, ["batch", "gpu"], "batch"),
+            ("gpu", queues, "gpu"),
+            ("missing", queues, "batch"),
+            ("", queues, "batch"),
+        ]
+        for configured, available, expected in cases:
+            with self.subTest(configured=configured, queues=available), patch.dict(os.environ):
+                if configured is None:
+                    os.environ.pop("PBS_WORKBENCH_DEFAULT_QUEUE", None)
+                else:
+                    os.environ["PBS_WORKBENCH_DEFAULT_QUEUE"] = configured
+                editor = profile_editor.ProfileEditor({"name": "default"}, available)
+                self.assertEqual(editor.queue.get_value(), expected)
+
+    def test_saved_queue_takes_precedence_over_default(self):
+        with patch.dict(os.environ, {"PBS_WORKBENCH_DEFAULT_QUEUE": "juptq"}):
+            for saved in ("gpu", "old-queue"):
+                with self.subTest(saved=saved):
+                    editor = profile_editor.ProfileEditor(
+                        {"name": "default", "queue": saved}, ["batch", "gpu", "juptq"]
+                    )
+                    self.assertEqual(editor.queue.get_value(), saved)
 
     @patch("job.pbsqueue.subprocess.check_output")
     def test_unknown_queue_is_reported_without_usage_estimate(self, check_output):

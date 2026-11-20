@@ -150,7 +150,8 @@ class ProfileEditor:
         saved_queue = config.get("queue")
         missing_queue = saved_queue and saved_queue not in queues
         queue_options = [*queues, saved_queue] if missing_queue else queues
-        self.queue = QueueSelector(options=queue_options, default=saved_queue)
+        default_queue = saved_queue or os.environ.get("PBS_WORKBENCH_DEFAULT_QUEUE", "juptq")
+        self.queue = QueueSelector(options=queue_options, default=default_queue)
         queue_widgets = [self.queue]
         if missing_queue:
             queue_widgets.append(uw.Text("Saved queue is not currently reported by PBS."))
