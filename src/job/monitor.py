@@ -1,5 +1,6 @@
 import os
 import shlex
+import sys
 import urwid as uw
 
 from job import pbsqueue as q
@@ -9,6 +10,7 @@ from job import workbench as wb
 palette = [
     ('complete', 'default', 'white'),
     ('normal', 'white', 'default'),
+    ('button focus', 'black', 'light gray'),
 ]
 
 def ProgressTable(rows_data):
@@ -61,7 +63,7 @@ def start_fill(loop, seconds = 10):
     status_widget.set_text(f"{TITLE} {STATUS_FRAMES[0]}")
     loop.set_alarm_in(interval, tick, 1)
 
-def build_ui(info, container_instance=None, ssh_info=None):
+def build_ui(info, container_instance=None, ssh_info=None, on_leave=None):
     used_secs = info["used"]["walltime"]
     req_secs = info["requested"]["walltime"]
     cpu_pct = info["used"]["cpu"]
@@ -143,26 +145,32 @@ def build_ui(info, container_instance=None, ssh_info=None):
     
     body = uw.Padding(uw.Pile(body), left = 1, right = 1)
 
-    footer = [div]
+    def leave_running(_):
+        if on_leave is not None:
+            on_leave()
+        raise uw.ExitMainLoop()
 
-    ui = []
-    ui.extend(header)
-    ui.append(body)
-    ui.extend(footer)
-    
-    ui = uw.Pile(ui)
-    
-    main = uw.Filler(ui, "top")
-
-    return main
+    button = uw.AttrMap(
+        uw.Button("Leave Running In Background", on_press=leave_running),
+        None, "button focus",
+    )
+    footer = uw.Pile([div, uw.Padding(button, left=2)])
+    return uw.Frame(uw.Filler(body, "top"), header=uw.Pile(header),
+                    footer=footer, focus_part="footer")
 
 def monitor(workbench_file: str):
     job_id = wb.get_job_id(workbench_file)
+    left_running = False
+
+    def leave_running():
+        nonlocal left_running
+        left_running = True
+
     def UI(loop = None, data = None):
         info = q.info(job_id)
         instance = wb.running_container_instance(workbench_file, job_id) if info["state"] == "R" else None
         ssh_info = wb.running_container_ssh(workbench_file, job_id) if instance else None
-        ui = build_ui(info, instance, ssh_info)
+        ui = build_ui(info, instance, ssh_info, on_leave=leave_running)
 
         if loop is None:
             loop = uw.MainLoop(ui, palette = palette, handle_mouse = False)
@@ -175,6 +183,16 @@ def monitor(workbench_file: str):
             start_fill(loop)
             return loop
     
-    UI()
+    try:
+        UI()
+    except KeyboardInterrupt:
+        pass
+    if left_running:
+        print(job_id.rstrip())
+    print(
+        "Run 'job monitor' to monitor, 'job end' to stop the job, or "
+        "'job ssh-config' for details on SSHing into the job container.",
+        file=sys.stderr,
+    )
 
 

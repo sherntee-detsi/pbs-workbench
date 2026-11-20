@@ -127,6 +127,7 @@ def list():
     print("\n".join(running))
 
 
+@app.command("stop")
 @app.command()
 def end():
     """Stop the current running workbench"""
