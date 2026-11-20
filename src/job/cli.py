@@ -121,6 +121,7 @@ def profile(profile: str = typer.Argument("default", shell_complete=complete_pro
     from copy import deepcopy
     from job import workbench as wb
     from job import profile_editor
+    from job import pbsqueue as q
 
     profile_file = wb.get_profile(profile)
     if profile_file is None:
@@ -134,7 +135,12 @@ def profile(profile: str = typer.Argument("default", shell_complete=complete_pro
     else:
         with open(profile_file, "r") as f:
             config = json.load(f, parse_int=lambda x: str(x))
-    profile_editor.ProfileEditor(config).run()
+    try:
+        queues = q.list_queues()
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+    profile_editor.ProfileEditor(config, queues).run()
 
 
 if __name__ == "__main__":

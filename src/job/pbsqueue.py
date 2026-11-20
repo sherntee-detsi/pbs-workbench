@@ -6,6 +6,33 @@ from job import format
 from job import places as ps
 from job import timeout as to
 
+def list_queues() -> list[str]:
+    try:
+        output = subprocess.check_output(
+            ["qstat", "-Q", "-f", "-F", "json"],
+            text=True,
+            stderr=subprocess.PIPE,
+            timeout=to.get_timeout(),
+        )
+    except FileNotFoundError as e:
+        raise RuntimeError("Cannot list PBS queues: qstat was not found.") from e
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("Cannot list PBS queues: qstat timed out.") from e
+    except subprocess.CalledProcessError as e:
+        detail = (e.stderr or "").strip()
+        raise RuntimeError(f"Cannot list PBS queues: {detail or 'qstat failed.'}") from e
+
+    try:
+        queues = json.loads(output)["Queue"]
+        if not isinstance(queues, dict):
+            raise ValueError("Queue is not an object")
+    except (ValueError, KeyError, TypeError) as e:
+        raise RuntimeError("Cannot list PBS queues: invalid qstat JSON output.") from e
+    if not queues:
+        raise RuntimeError("Cannot list PBS queues: no queues were reported.")
+    return sorted(queues)
+
+
 def exists(job_id: str="default") -> bool:
     timeout = to.get_timeout()
     code = subprocess.run(["qstat", "-f", job_id], stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL, timeout = timeout)
@@ -142,8 +169,10 @@ QUEUE_RAM_PER_CPU: dict[str, float] = {
     "copyq": 2,
 }
 
-def su_compute(queue: str, walltime: int, ncpus: int, memory: int) -> int:
+def su_compute(queue: str, walltime: int, ncpus: int, memory: int) -> float | None:
     queue = queue.removesuffix("-exec")
+    if queue not in QUEUE_RAM_PER_CPU or queue not in QUEUE_RATES:
+        return None
     walltime_hours = walltime / 3600
 
     ram_per_cpu = QUEUE_RAM_PER_CPU[queue]

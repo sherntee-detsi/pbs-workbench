@@ -10,10 +10,7 @@ PALETTE = [
 ]
 PROJECT = os.environ.get("PROJECT", "")
 
-QUEUES = ["normal", "normalbw", "bigmem", "bigmembw"]
-
 DEFAULT_CONFIG = {
-    "queue": QUEUES[0],
     "name": "default",
     "resources": {
         "ncpus": "8",
@@ -60,6 +57,7 @@ def Table(rows_data):
 class RadioButtonEnter(uw.RadioButton):
     def keypress(self, size, key):
         if key == "enter":
+            super().keypress(size, " ")
             return "down"
         return super().keypress(size, key)
 
@@ -67,7 +65,7 @@ class RadioButtonEnter(uw.RadioButton):
 class RadioButtonGroup:
     def __init__(self, options, default=None):
         group = []
-        if default is None:
+        if default not in options:
             default = options[0]
 
         for option in options:
@@ -117,7 +115,7 @@ class TabbedPile(uw.Pile):
 
 
 class ProfileEditor:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, queues: list[str]):
         self.exit_message = None
         resources = config.get("resources", DEFAULT_CONFIG["resources"])
         self.saved_project = config.get("project")
@@ -141,11 +139,19 @@ class ProfileEditor:
             "+".join(resources.get("storage", DEFAULT_CONFIG["resources"]["storage"])),
         )
 
-        self.queue = RadioButtonGroup(
-            options=QUEUES, default=config.get("queue", DEFAULT_CONFIG["queue"])
-        )
-
-        queue_column = uw.Columns([("pack", w) for w in self.queue], dividechars=2)
+        saved_queue = config.get("queue")
+        missing_queue = saved_queue and saved_queue not in queues
+        queue_options = [*queues, saved_queue] if missing_queue else queues
+        self.queue = RadioButtonGroup(options=queue_options, default=saved_queue)
+        self.queue_list = uw.ListBox(uw.SimpleFocusListWalker(list(self.queue)))
+        self.queue_list.focus_position = queue_options.index(self.queue.get_value())
+        queue_widgets = [
+            uw.BoxAdapter(self.queue_list, min(len(queue_options), 4)),
+            uw.Text("Up/down to browse; space or enter to select"),
+        ]
+        if missing_queue:
+            queue_widgets.append(uw.Text("Saved queue is not currently reported by PBS."))
+        queue_column = uw.Pile(queue_widgets)
 
         btn_save = uw.Button("Save")
         btn_quit = uw.Button("Quit")

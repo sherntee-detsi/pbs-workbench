@@ -24,7 +24,8 @@ class ProfileProjectTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             importlib.reload(profile_editor)
             return profile_editor.ProfileEditor(
-                config if config is not None else profile_editor.DEFAULT_CONFIG
+                config if config is not None else profile_editor.DEFAULT_CONFIG,
+                ["normal"],
             )
 
     def save_profile(self, editor, directory):

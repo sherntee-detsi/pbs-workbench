@@ -66,7 +66,7 @@ def build_ui(info):
     cpu_pct = info["used"]["cpu"]
     job_id = info["job_id"]
     su = info["su"]
-    used_su = su * used_secs / req_secs
+    usage = f"{round(su * used_secs / req_secs)} SU" if su is not None else "unavailable"
 
     user = os.environ["USER"]
     wd = os.getcwd()
@@ -77,7 +77,7 @@ def build_ui(info):
 
     body = []
     
-    title = [uw.Text(f"Profile: {info["profile"]}"), uw.Text(f"Job ID: {job_id}"), uw.Text(f"Usage: {round(used_su)} SU")]
+    title = [uw.Text(f"Profile: {info["profile"]}"), uw.Text(f"Job ID: {job_id}"), uw.Text(f"Usage: {usage}")]
     body.extend(title)
 
     job_status = info["state"]
