@@ -120,7 +120,7 @@ def ssh_config():
 
 @app.command()
 def list():
-    """List running workbenchs"""
+    """List running workbenches"""
     from job import workbench as wb
 
     running = [os.path.basename(file) for file in wb.workbench_list()]

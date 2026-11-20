@@ -268,7 +268,7 @@ class ProfileEditor:
                             uw.Pile(
                                 [
                                     uw.Text(
-                                        f"Profile {self.name.get_edit_text()} already exist"
+                                        f"Profile {self.name.get_edit_text()} already exists"
                                     ),
                                     uw.Columns(
                                         [
