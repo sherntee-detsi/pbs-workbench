@@ -1,11 +1,13 @@
 import json
 import os
+import shlex
 import tempfile
 from importlib.resources import files
 import subprocess
 
 from job import places as ps
 from job import pbsqueue as q
+from job import container
 
 DIRECTIVE_ARGUMENTS = dict(project = "P", queue = "q", name = "N", resources = "l")
 
@@ -44,7 +46,7 @@ def jobscript_from_json(json_file: str, workbench_file: str) -> str:
     with open(json_file, "r") as f:
         config = json.load(f)
 
-    directives = [parse_directive(key, value) for key, value in config.items()]
+    directives = [parse_directive(key, value) for key, value in config.items() if key != "container"]
     directives = flatten(directives)
   
     defaults = [f"#PBS -o {ps.logs_folder()}", f"#PBS -e {ps.logs_folder()}"]
@@ -56,13 +58,19 @@ def jobscript_from_json(json_file: str, workbench_file: str) -> str:
     with open(idle_file) as f:
         idle = [line.rstrip() for line in f]
 
+    container_config = config.get("container", {})
+    image = container_config.get("image", "").strip()
+    flags = container.parse_flags(container_config.get("flags", "")) if image else []
+
     fd, path = tempfile.mkstemp()
 
     with os.fdopen(fd, "w") as f:
         f.write("#!/bin/bash\n")
         f.writelines(line + "\n" for line in directives)
-        f.write(f'WORKBENCH_FILE="{workbench_file}"\n')
+        f.write(f"WORKBENCH_FILE={shlex.quote(workbench_file)}\n")
         f.write('cd -- "${PBS_O_WORKDIR:?PBS_O_WORKDIR is not set}" || exit 1\n')
+        f.write(f"CONTAINER_IMAGE={shlex.quote(image)}\n")
+        f.write(f"CONTAINER_FLAGS=({shlex.join(flags)})\n")
         f.writelines(line + "\n" for line in idle)
 
     return path

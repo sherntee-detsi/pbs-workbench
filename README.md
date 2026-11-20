@@ -84,6 +84,7 @@ This will open the Profile Editor with some defaults.
 ───────────────────────────────────────────────────────────────────────────────────────
                               PBS Workbench Profile Editor
 ───────────────────────────────────────────────────────────────────────────────────────
+  < Job * >  < Container >
  Name:     default
  Queue:    < normal >  (left/right)
  Project:  lo70
@@ -98,6 +99,9 @@ Use the UI to configure job requirements (CPUs, memory, walltime, etc.).
 The queue choices come from PBS; use left and right to select a queue. A saved
 queue no longer reported by PBS remains selected and is marked in the editor.
 Jobfs and Storage are optional and initially empty; use Advanced to edit them.
+In the Container tab, set an Apptainer image and optional flags to start a
+job-specific instance. Leave Image empty to run without a container. Flags
+support shell-style quoting but not shell expansion.
 If you want to create more than one profile, you can run `job profile profile_name` to create a new profile with a name "profile_name".
 If profile_name already exists, this will let you edit it. 
 

@@ -3,6 +3,7 @@ import urwid as uw
 import os
 
 from job import places as ps
+from job import container
 
 
 PALETTE = [
@@ -98,7 +99,7 @@ class TabbedPile(uw.Pile):
             # If we are at the end (buttons) go to the first
             # If we are not, then go to the end.
             if self.focus_position == len(self.contents) - 1:
-                self.focus_position = 3  # first one.
+                self.focus_position = 4
             else:
                 self.focus_position = (
                     len(self.contents) - 1
@@ -112,7 +113,9 @@ class ProfileEditor:
     def __init__(self, config: dict, queues: list[str]):
         self.exit_message = None
         self.advanced = False
+        self.current_tab = "job"
         resources = config.get("resources", DEFAULT_CONFIG["resources"])
+        container_config = config.get("container", {})
         self.saved_project = config.get("project")
 
         self.name = EditEnter("", config.get("name", ""))
@@ -133,6 +136,13 @@ class ProfileEditor:
             "",
             "+".join(resources.get("storage", DEFAULT_CONFIG["resources"]["storage"])),
         )
+        self.image = EditEnter("", container_config.get("image", ""))
+        self.flags = EditEnter("", container_config.get("flags", ""))
+        self.container_command = uw.Text("")
+        self.container_error = uw.Text("")
+        uw.connect_signal(self.image, "change", self.update_container_command)
+        uw.connect_signal(self.flags, "change", self.update_container_command)
+        self.update_container_command()
 
         saved_queue = config.get("queue")
         missing_queue = saved_queue and saved_queue not in queues
@@ -160,16 +170,46 @@ class ProfileEditor:
         div = uw.Divider("─")
         header = [div, uw.Text("PBS Workbench Profile Editor", align="center"), div]
 
-        self.body = Table(self.profile_rows())
+        self.job_tab = uw.Button("Job *", on_press=lambda _: self.set_tab("job"))
+        self.container_tab = uw.Button("Container", on_press=lambda _: self.set_tab("container"))
+        tabs = uw.Padding(
+            uw.Columns([("pack", self.job_tab), ("pack", self.container_tab)], dividechars=2),
+            left=2,
+        )
+        self.body = self.build_body()
 
         ui = []
         ui.extend(header)
+        ui.append(tabs)
         ui.append(self.body)
         ui.append(div)
         ui.append(buttons)
 
         self.ui = uw.Filler(TabbedPile(ui), "top")
+        self.ui.original_widget.focus_position = 4
         self.loop = uw.MainLoop(self.ui, palette=PALETTE)
+
+    def update_container_command(self, widget=None, text=None):
+        image = text if widget is self.image else self.image.get_edit_text()
+        flags = text if widget is self.flags else self.flags.get_edit_text()
+        self.container_command.set_text(container.command_preview(image, flags))
+        self.container_error.set_text("")
+
+    def build_body(self):
+        if self.current_tab == "job":
+            return Table(self.profile_rows())
+        fields = Table([WithLabel("Image:", self.image), WithLabel("Flags:", self.flags)])
+        return uw.Padding(
+            uw.Pile([fields, uw.Text("Container command:"), self.container_command, self.container_error]),
+            align="right",
+            left=1,
+        )
+
+    def set_tab(self, tab):
+        self.current_tab = tab
+        self.job_tab.set_label("Job *" if tab == "job" else "Job")
+        self.container_tab.set_label("Container *" if tab == "container" else "Container")
+        self.body.original_widget = self.build_body().original_widget
 
     def profile_rows(self):
         rows = [
@@ -193,9 +233,20 @@ class ProfileEditor:
     def toggle_advanced(self, button):
         self.advanced = not self.advanced
         button.set_label("Hide advanced" if self.advanced else "Advanced")
-        self.body.original_widget = Table(self.profile_rows()).original_widget
+        self.set_tab("job")
 
     def save(self, force=False):
+        image = self.image.get_edit_text().strip()
+        flags = self.flags.get_edit_text()
+        if image:
+            try:
+                container.parse_flags(flags)
+            except ValueError as e:
+                self.set_tab("container")
+                self.container_error.set_text(f"Invalid flags: {e}")
+                self.ui.original_widget.focus_position = 4
+                return
+
         filename = self.name.get_edit_text() + ".json"
         path = f"{ps.profile_folder()}/{filename}"
 
@@ -271,6 +322,8 @@ class ProfileEditor:
         storage = self.storage.get_edit_text().strip()
         if storage:
             config["resources"]["storage"] = storage.split("+")
+        if image or flags:
+            config["container"] = {"image": image, "flags": flags}
 
         with open(path, "w") as f:
             f.writelines(json.dumps(config, indent = 4))
