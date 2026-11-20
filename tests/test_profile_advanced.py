@@ -20,7 +20,7 @@ class AdvancedProfileTests(unittest.TestCase):
         self.addCleanup(script.unlink, missing_ok=True)
         return json.loads(profile.read_text()), script.read_text()
 
-    def test_arrow_navigation_and_advanced_button(self):
+    def test_arrow_navigation_and_advanced_tab(self):
         editor = profile_editor.ProfileEditor({"name": "default"}, ["batch", "gpu"])
         size = (100, 25)
         editor.ui.render(size, focus=True)
@@ -34,21 +34,29 @@ class AdvancedProfileTests(unittest.TestCase):
         editor.ui.keypress(size, "left")
         self.assertEqual(editor.queue.get_value(), "batch")
 
-        canvas = b"\n".join(editor.ui.render(size).text)
+        lines = editor.ui.render(size).text
+        canvas = b"\n".join(lines)
         self.assertNotIn(b"Jobfs:", canvas)
         self.assertNotIn(b"Storage:", canvas)
-        self.assertLess(canvas.index(b"Save"), canvas.index(b"Advanced"))
-        self.assertLess(canvas.index(b"Advanced"), canvas.index(b"Quit"))
+        self.assertLess(canvas.index(b"Job *"), canvas.index(b"Advanced"))
+        self.assertLess(canvas.index(b"Advanced"), canvas.index(b"Container"))
+        tab_row = next(i for i, line in enumerate(lines) if b"Job *" in line)
+        self.assertEqual(lines[tab_row + 1].strip(), b"")
+        self.assertIn(b"Name:", lines[tab_row + 2])
 
-        editor.ui.keypress(size, "tab")
+        editor.ui.keypress(size, "up")
+        editor.ui.keypress(size, "up")
         editor.ui.keypress(size, "right")
         editor.ui.keypress(size, "enter")
+        self.assertEqual(editor.current_tab, "advanced")
         canvas = b"\n".join(editor.ui.render(size).text)
         self.assertIn(b"Jobfs:", canvas)
         self.assertIn(b"Storage:", canvas)
         editor.jobfs.set_edit_text("25GB")
         editor.storage.set_edit_text("scratch/project")
+        editor.ui.keypress(size, "left")
         editor.ui.keypress(size, "enter")
+        self.assertEqual(editor.current_tab, "job")
         self.assertNotIn(b"Jobfs:", b"\n".join(editor.ui.render(size).text))
         self.assertEqual(editor.jobfs.get_edit_text(), "25GB")
         self.assertEqual(editor.storage.get_edit_text(), "scratch/project")

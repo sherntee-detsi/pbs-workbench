@@ -15,6 +15,7 @@ trap 'exit 143' SIGTERM
 if [ -n "$CONTAINER_IMAGE" ]; then
     : "${PBS_JOBID:?PBS_JOBID is not set}"
     INSTANCE_NAME="pbs-workbench-${PBS_JOBID//[^a-zA-Z0-9._-]/_}"
+    module load apptainer || exit $?
     apptainer instance start "${CONTAINER_FLAGS[@]}" "$CONTAINER_IMAGE" "$INSTANCE_NAME" || exit $?
     INSTANCE_STARTED=1
 fi

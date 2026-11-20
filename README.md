@@ -84,7 +84,8 @@ This will open the Profile Editor with some defaults.
 ───────────────────────────────────────────────────────────────────────────────────────
                               PBS Workbench Profile Editor
 ───────────────────────────────────────────────────────────────────────────────────────
-  < Job * >  < Container >
+  < Job * >  < Advanced >  < Container >
+
  Name:     default
  Queue:    < normal >  (left/right)
  Project:  lo70
@@ -92,7 +93,7 @@ This will open the Profile Editor with some defaults.
  RAM:      32GB
  Walltime: 8:00:00
 ───────────────────────────────────────────────────────────────────────────────────────
-  < Save >    < Advanced >    < Quit >
+  < Save >    < Quit >
 ```
 
 Use the UI to configure job requirements (CPUs, memory, walltime, etc.). 

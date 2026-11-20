@@ -99,7 +99,7 @@ class TabbedPile(uw.Pile):
             # If we are at the end (buttons) go to the first
             # If we are not, then go to the end.
             if self.focus_position == len(self.contents) - 1:
-                self.focus_position = 4
+                self.focus_position = 5
             else:
                 self.focus_position = (
                     len(self.contents) - 1
@@ -112,7 +112,6 @@ class TabbedPile(uw.Pile):
 class ProfileEditor:
     def __init__(self, config: dict, queues: list[str]):
         self.exit_message = None
-        self.advanced = False
         self.current_tab = "job"
         resources = config.get("resources", DEFAULT_CONFIG["resources"])
         container_config = config.get("container", {})
@@ -154,14 +153,13 @@ class ProfileEditor:
         self.queue_column = uw.Pile(queue_widgets)
 
         btn_save = uw.Button("Save")
-        self.btn_advanced = uw.Button("Advanced", on_press=self.toggle_advanced)
         btn_quit = uw.Button("Quit")
         uw.connect_signal(btn_save, "click", lambda _: self.save())
         uw.connect_signal(btn_quit, "click", lambda _: self.quit())
 
         buttons = uw.Padding(
             uw.Columns(
-                [("pack", btn_save), ("pack", self.btn_advanced), ("pack", btn_quit)],
+                [("pack", btn_save), ("pack", btn_quit)],
                 dividechars=4,
             ),
             left=2,
@@ -171,9 +169,13 @@ class ProfileEditor:
         header = [div, uw.Text("PBS Workbench Profile Editor", align="center"), div]
 
         self.job_tab = uw.Button("Job *", on_press=lambda _: self.set_tab("job"))
+        self.advanced_tab = uw.Button("Advanced", on_press=lambda _: self.set_tab("advanced"))
         self.container_tab = uw.Button("Container", on_press=lambda _: self.set_tab("container"))
         tabs = uw.Padding(
-            uw.Columns([("pack", self.job_tab), ("pack", self.container_tab)], dividechars=2),
+            uw.Columns(
+                [("pack", self.job_tab), ("pack", self.advanced_tab), ("pack", self.container_tab)],
+                dividechars=2,
+            ),
             left=2,
         )
         self.body = self.build_body()
@@ -181,12 +183,13 @@ class ProfileEditor:
         ui = []
         ui.extend(header)
         ui.append(tabs)
+        ui.append(uw.Divider())
         ui.append(self.body)
         ui.append(div)
         ui.append(buttons)
 
         self.ui = uw.Filler(TabbedPile(ui), "top")
-        self.ui.original_widget.focus_position = 4
+        self.ui.original_widget.focus_position = 5
         self.loop = uw.MainLoop(self.ui, palette=PALETTE)
 
     def update_container_command(self, widget=None, text=None):
@@ -198,6 +201,8 @@ class ProfileEditor:
     def build_body(self):
         if self.current_tab == "job":
             return Table(self.profile_rows())
+        if self.current_tab == "advanced":
+            return Table([WithLabel("Jobfs:", self.jobfs), WithLabel("Storage:", self.storage)])
         fields = Table([WithLabel("Image:", self.image), WithLabel("Flags:", self.flags)])
         return uw.Padding(
             uw.Pile([fields, uw.Text("Container command:"), self.container_command, self.container_error]),
@@ -208,6 +213,7 @@ class ProfileEditor:
     def set_tab(self, tab):
         self.current_tab = tab
         self.job_tab.set_label("Job *" if tab == "job" else "Job")
+        self.advanced_tab.set_label("Advanced *" if tab == "advanced" else "Advanced")
         self.container_tab.set_label("Container *" if tab == "container" else "Container")
         self.body.original_widget = self.build_body().original_widget
 
@@ -223,17 +229,7 @@ class ProfileEditor:
             WithLabel("RAM:", self.mem),
             WithLabel("Walltime:", self.walltime),
         ])
-        if self.advanced:
-            rows.extend([
-                WithLabel("Jobfs:", self.jobfs),
-                WithLabel("Storage:", self.storage),
-            ])
         return rows
-
-    def toggle_advanced(self, button):
-        self.advanced = not self.advanced
-        button.set_label("Hide advanced" if self.advanced else "Advanced")
-        self.set_tab("job")
 
     def save(self, force=False):
         image = self.image.get_edit_text().strip()
@@ -244,7 +240,7 @@ class ProfileEditor:
             except ValueError as e:
                 self.set_tab("container")
                 self.container_error.set_text(f"Invalid flags: {e}")
-                self.ui.original_widget.focus_position = 4
+                self.ui.original_widget.focus_position = 5
                 return
 
         filename = self.name.get_edit_text() + ".json"

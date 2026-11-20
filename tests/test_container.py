@@ -18,6 +18,7 @@ class ContainerProfileTests(unittest.TestCase):
         editor.ui.render(size, focus=True)
         editor.ui.keypress(size, "up")
         editor.ui.keypress(size, "right")
+        editor.ui.keypress(size, "right")
         editor.ui.keypress(size, "enter")
         canvas = b"\n".join(editor.ui.render(size, focus=True).text)
         self.assertIn(b"Image:", canvas)
@@ -57,7 +58,7 @@ class ContainerProfileTests(unittest.TestCase):
 
 
 class ContainerJobTests(unittest.TestCase):
-    def run_job(self, root, image, flags, fail=False, terminate=False):
+    def run_job(self, root, image, flags, fail=False, terminate=False, module_fail=False):
         root = Path(root)
         idle = Path(workbench.__file__).parent / "data" / "idle.sh"
         action = "kill -s TERM $$" if terminate else "break"
@@ -75,6 +76,12 @@ class ContainerJobTests(unittest.TestCase):
             + ('exit 42\n' if fail else 'exit 0\n')
         )
         executable.chmod(0o755)
+        module = root / "module"
+        module.write_text(
+            '#!/bin/sh\nprintf "<module:%s>\\n" "$@" >> "$TRACE"\n'
+            + ('exit 23\n' if module_fail else 'exit 0\n')
+        )
+        module.chmod(0o755)
         with patch("job.workbench.files", return_value=root), patch(
             "job.places.logs_folder", return_value=str(root)
         ):
@@ -100,7 +107,8 @@ class ContainerJobTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
                 trace.splitlines(),
-                ["<instance>", "<start>", "<--bind>", "</path with spaces:/data>",
+                ["<module:load>", "<module:apptainer>",
+                 "<instance>", "<start>", "<--bind>", "</path with spaces:/data>",
                  "<--nv>", f"<{image}>", "<pbs-workbench-123_4_.server>",
                  "<instance>", "<stop>", "<pbs-workbench-123_4_.server>"],
             )
@@ -120,6 +128,13 @@ class ContainerJobTests(unittest.TestCase):
             self.assertEqual(result.returncode, 42)
             self.assertIn("<start>", trace)
             self.assertNotIn("<stop>", trace)
+            self.assertFalse(marker.exists())
+
+    def test_module_load_failure_prevents_container_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, trace, marker = self.run_job(directory, "image.sif", "", module_fail=True)
+            self.assertEqual(result.returncode, 23)
+            self.assertEqual(trace.splitlines(), ["<module:load>", "<module:apptainer>"])
             self.assertFalse(marker.exists())
 
     def test_sigterm_stops_instance(self):
