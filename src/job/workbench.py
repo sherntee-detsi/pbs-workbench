@@ -47,7 +47,7 @@ def jobscript_from_json(json_file: str, workbench_file: str) -> str:
     directives = [parse_directive(key, value) for key, value in config.items()]
     directives = flatten(directives)
   
-    defaults = ["#PBS -l wd", f"#PBS -o {ps.logs_folder()}", f"#PBS -e {ps.logs_folder()}"]
+    defaults = [f"#PBS -o {ps.logs_folder()}", f"#PBS -e {ps.logs_folder()}"]
 
     directives.extend(defaults)
 
@@ -61,7 +61,8 @@ def jobscript_from_json(json_file: str, workbench_file: str) -> str:
     with os.fdopen(fd, "w") as f:
         f.write("#!/bin/bash\n")
         f.writelines(line + "\n" for line in directives)
-        f.write(f'WORKBENCH_FILE="{workbench_file}"')
+        f.write(f'WORKBENCH_FILE="{workbench_file}"\n')
+        f.write('cd -- "${PBS_O_WORKDIR:?PBS_O_WORKDIR is not set}" || exit 1\n')
         f.writelines(line + "\n" for line in idle)
 
     return path
@@ -113,11 +114,16 @@ def workbench_start(profile: str) -> str:
         raise FileNotFoundError(f"Profile {profile} not found.")
     
     workbench_file = workbench_file_new()
-    job_script = jobscript_from_json(job_json, workbench_file)
-
-    os.makedirs(ps.logs_folder(), exist_ok = True)
-
-    job_id = q.submit(job_script)
+    try:
+        job_script = jobscript_from_json(job_json, workbench_file)
+        os.makedirs(ps.logs_folder(), exist_ok = True)
+        job_id = q.submit(job_script)
+    except Exception:
+        try:
+            os.remove(workbench_file)
+        except FileNotFoundError:
+            pass
+        raise
     with open(workbench_file, "w") as f:
         f.writelines(job_id)
 
