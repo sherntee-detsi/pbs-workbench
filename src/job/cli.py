@@ -86,6 +86,38 @@ def monitor():
     mon.monitor(current)
 
 
+@app.command("ssh-config")
+def ssh_config():
+    """Print local SSH configuration for the running container."""
+    import re
+    from job import workbench as wb
+    from job import pbsqueue as q
+
+    current = wb.workbench_current()
+    if not current:
+        typer.echo("No workbench running.", err=True)
+        raise typer.Exit(1)
+    workbench_file = current[0]
+    job_id = wb.get_job_id(workbench_file)
+    info = q.info(job_id)
+    ssh_info = wb.running_container_ssh(workbench_file, job_id) if info["state"] == "R" else None
+    if not ssh_info:
+        typer.echo("Container SSH is not ready or is not enabled.", err=True)
+        raise typer.Exit(1)
+    user = os.environ.get("USER", "")
+    hostname = info["hostname"]
+    if not re.fullmatch(r"[a-zA-Z0-9._-]+", user) or not re.fullmatch(r"[a-zA-Z0-9._-]+", hostname):
+        typer.echo("Cannot create SSH config: invalid user or compute hostname.", err=True)
+        raise typer.Exit(1)
+    print(f'# Verify the container host key: {ssh_info["fingerprint"]}')
+    print("Host pbs-workbench")
+    print("    HostName 127.0.0.1")
+    print(f'    Port {ssh_info["port"]}')
+    print(f"    User {user}")
+    print(f'    HostKeyAlias {ssh_info["host_key_alias"]}')
+    print(f"    ProxyCommand ssh -W %h:%p {user}@{hostname}")
+
+
 @app.command()
 def list():
     """List running workbenchs"""

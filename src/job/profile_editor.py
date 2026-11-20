@@ -137,10 +137,14 @@ class ProfileEditor:
         )
         self.image = EditEnter("", container_config.get("image", ""))
         self.flags = EditEnter("", container_config.get("flags", ""))
+        self.container_ssh = uw.CheckBox(
+            "Enable VS Code SSH", state=container_config.get("ssh", False)
+        )
         self.container_command = uw.Text("")
         self.container_error = uw.Text("")
         uw.connect_signal(self.image, "change", self.update_container_command)
         uw.connect_signal(self.flags, "change", self.update_container_command)
+        uw.connect_signal(self.container_ssh, "change", self.update_container_command)
         self.update_container_command()
 
         saved_queue = config.get("queue")
@@ -195,7 +199,8 @@ class ProfileEditor:
     def update_container_command(self, widget=None, text=None):
         image = text if widget is self.image else self.image.get_edit_text()
         flags = text if widget is self.flags else self.flags.get_edit_text()
-        self.container_command.set_text(container.command_preview(image, flags))
+        ssh = text if widget is self.container_ssh else self.container_ssh.get_state()
+        self.container_command.set_text(container.command_preview(image, flags, ssh))
         self.container_error.set_text("")
 
     def build_body(self):
@@ -205,7 +210,10 @@ class ProfileEditor:
             return Table([WithLabel("Jobfs:", self.jobfs), WithLabel("Storage:", self.storage)])
         fields = Table([WithLabel("Image:", self.image), WithLabel("Flags:", self.flags)])
         return uw.Padding(
-            uw.Pile([fields, uw.Text("Container command:"), self.container_command, self.container_error]),
+            uw.Pile([
+                fields, self.container_ssh, uw.Text("Container command:"),
+                self.container_command, self.container_error,
+            ]),
             align="right",
             left=1,
         )
@@ -234,6 +242,11 @@ class ProfileEditor:
     def save(self, force=False):
         image = self.image.get_edit_text().strip()
         flags = self.flags.get_edit_text()
+        if self.container_ssh.get_state() and not image:
+            self.set_tab("container")
+            self.container_error.set_text("An image is required for VS Code SSH.")
+            self.ui.original_widget.focus_position = 5
+            return
         if image:
             try:
                 container.parse_flags(flags)
@@ -318,8 +331,10 @@ class ProfileEditor:
         storage = self.storage.get_edit_text().strip()
         if storage:
             config["resources"]["storage"] = storage.split("+")
-        if image or flags:
-            config["container"] = {"image": image, "flags": flags}
+        if image or flags or self.container_ssh.get_state():
+            config["container"] = {
+                "image": image, "flags": flags, "ssh": self.container_ssh.get_state()
+            }
 
         with open(path, "w") as f:
             f.writelines(json.dumps(config, indent = 4))

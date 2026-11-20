@@ -61,14 +61,18 @@ class ContainerJobTests(unittest.TestCase):
     def run_job(self, root, image, flags, fail=False, terminate=False, module_fail=False):
         root = Path(root)
         idle = Path(workbench.__file__).parent / "data" / "idle.sh"
-        action = "kill -s TERM $$" if terminate else "break"
+        action = (
+            "kill -s TERM $$" if terminate else
+            'if [ -n "${CONTAINER_READY_FILE:-}" ]; then cat "$CONTAINER_READY_FILE"; fi; break'
+        )
         (root / "idle.sh").write_text(idle.read_text().replace("sleep 30", action))
         profile = root / "profile.json"
         profile.write_text(json.dumps({
             "queue": "batch",
             "container": {"image": image, "flags": flags},
         }))
-        marker = root / "workbench"
+        marker = root / "workbenches" / "00"
+        marker.parent.mkdir()
         marker.touch()
         executable = root / "apptainer"
         executable.write_text(
@@ -113,7 +117,9 @@ class ContainerJobTests(unittest.TestCase):
                  "<instance>", "<stop>", "<pbs-workbench-123_4_.server>"],
             )
             self.assertFalse(Path(directory, "injected").exists())
+            self.assertEqual(result.stdout.strip(), "123[4].server")
             self.assertFalse(marker.exists())
+            self.assertIsNone(workbench.running_container_instance(str(marker), "123[4].server"))
 
     def test_empty_image_skips_apptainer(self):
         with tempfile.TemporaryDirectory() as directory:

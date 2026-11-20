@@ -170,6 +170,9 @@ Once the job starts, the monitor show something like this:
 
 The monitor will tell you the status of the job and the compute node where it's running. 
 It will also show you convenient commands that you can copy to connect directly to the compute node via SSH, create an SSH tunnel or connect in VSCode with the Remote-SSH extension. 
+For a container-enabled job, it also shows a command to SSH to the node and
+open a shell in the Apptainer instance once the instance has started. This
+shell command does not itself configure VS Code Remote-SSH inside the container.
 The bars wil show you your used and remaining time, as well as CPU usage and memory usage reported by `qstat`. 
 If you consistently underuse your CPU, consider requesting a smaller job. 
 
@@ -206,6 +209,53 @@ positron --remote ssh-remote+gadi-cpu-clx-0428 /home/565/xxxxx
 ```
 
 This will open the editor, connect to the remote node, and open the current directory. 
+
+### VS Code Remote-SSH inside an Apptainer container
+
+Container SSH is opt-in. The supplied `containers/vscode.def` builds a Debian
+image with the Linux libraries, OpenSSH server, Python 3, Bash, tar and curl
+needed for the helper and VS Code Server. From a checkout on a machine that
+can build Apptainer images, run:
+
+```sh
+apptainer build --fakeroot vscode.sif containers/vscode.def
+```
+
+Use a cluster-supported build method if fakeroot is unavailable, and place the
+resulting SIF on storage accessible from the compute node. A custom image or
+registry image can also be used if it has those prerequisites, the job user's
+account and login shell, and a writable home directory. The host kernel must
+meet [VS Code's Linux requirements](https://code.visualstudio.com/docs/remote/linux).
+The job binds `$HOME` into the instance; incompatible bind or network-isolation
+flags can prevent SSH from working.
+
+1. In `job profile`, open **Container**, set Image to the image path or URI,
+   optionally set Flags, and select **Enable VS Code SSH**. Start the job.
+2. Ensure the job owner's `~/.ssh/authorized_keys` contains the public key
+   from your local SSH client, and that your home, `.ssh` directory and key
+   file have permissions acceptable to OpenSSH `StrictModes`.
+3. When the monitor says container SSH is ready, run `job ssh-config` on the
+   cluster login node. Copy its output to your local `~/.ssh/config`, before
+   any general `Host *` rules. Configure SSH on your local machine so the
+   compute hostname in the generated `ProxyCommand` is reachable through the
+   login node, for example via an existing `ProxyJump` rule. The compute-node
+   SSH server must permit TCP forwarding.
+4. Connect to `pbs-workbench` using VS Code's Remote-SSH extension. At the
+   first host-key prompt, compare the fingerprint with the one printed by
+   `job ssh-config` before accepting it. VS Code installs its server into the
+   bound home; if the compute node has no internet access, configure the
+   extension's local-download fallback.
+
+The endpoint and port change with each job: rerun `job ssh-config` and update
+the local entry after starting another job. The host key is persistent in the
+user-private `~/pbs-workbench/ssh/` directory. The listener binds only to the
+compute node's loopback interface and uses public-key authentication, but
+other local users can still reach it. Its unprivileged SSH server runs with
+`UsePAM no`, so it does not apply the host's PAM/MFA or session policies.
+Confirm this is permitted with the cluster administrator, and verify that the
+SSH session and VS Code processes remain in the job's PBS cgroup. The
+companion extension's existing compute-node connection is not automatically
+redirected into the container.
 
 ### Jupyter lab
 

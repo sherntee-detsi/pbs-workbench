@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shlex
 import tempfile
 from importlib.resources import files
@@ -61,6 +62,11 @@ def jobscript_from_json(json_file: str, workbench_file: str) -> str:
     container_config = config.get("container", {})
     image = container_config.get("image", "").strip()
     flags = container.parse_flags(container_config.get("flags", "")) if image else []
+    ssh_enabled = container_config.get("ssh", False)
+    if ssh_enabled and not image:
+        raise ValueError("An image is required for VS Code SSH.")
+    if ssh_enabled:
+        ssh_source = (files("job.data") / "sshd.py").read_text()
 
     fd, path = tempfile.mkstemp()
 
@@ -71,9 +77,50 @@ def jobscript_from_json(json_file: str, workbench_file: str) -> str:
         f.write('cd -- "${PBS_O_WORKDIR:?PBS_O_WORKDIR is not set}" || exit 1\n')
         f.write(f"CONTAINER_IMAGE={shlex.quote(image)}\n")
         f.write(f"CONTAINER_FLAGS=({shlex.join(flags)})\n")
+        f.write(f"CONTAINER_READY_DIR={shlex.quote(container_ready_dir(workbench_file))}\n")
+        f.write(f"CONTAINER_SSH_ENABLED={1 if ssh_enabled else 0}\n")
+        if ssh_enabled:
+            f.write("CONTAINER_SSH_SOURCE=$(cat <<'PBS_WORKBENCH_SSHD_EOF'\n")
+            f.write(ssh_source)
+            f.write("\nPBS_WORKBENCH_SSHD_EOF\n)\n")
         f.writelines(line + "\n" for line in idle)
 
     return path
+
+
+def container_ready_dir(workbench_file: str) -> str:
+    workbench_dir = os.path.dirname(os.path.abspath(workbench_file))
+    return os.path.join(os.path.dirname(workbench_dir), "container-instances", os.path.basename(workbench_file))
+
+
+def running_container_instance(workbench_file: str, job_id: str) -> str | None:
+    name = container.instance_name(job_id)
+    path = os.path.join(container_ready_dir(workbench_file), name)
+    try:
+        with open(path) as f:
+            return name if f.read().rstrip("\n") == job_id else None
+    except FileNotFoundError:
+        return None
+
+
+def running_container_ssh(workbench_file: str, job_id: str) -> dict | None:
+    if not running_container_instance(workbench_file, job_id):
+        return None
+    path = os.path.join(container_ready_dir(workbench_file), container.instance_name(job_id) + ".ssh.json")
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        if (
+            data.get("job_id") != job_id
+            or type(data.get("port")) is not int
+            or not 1 <= data["port"] <= 65535
+            or not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", data.get("fingerprint", ""))
+            or not re.fullmatch(r"pbs-workbench-[A-Za-z0-9_-]{43}", data.get("host_key_alias", ""))
+        ):
+            return None
+        return data
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, AttributeError):
+        return None
 
 # There could be a race condition between checking for free files 
 # and creating the file, so we need to wrap this in a try-loop. 

@@ -1,4 +1,5 @@
 import os
+import shlex
 import urwid as uw
 
 from job import pbsqueue as q
@@ -60,7 +61,7 @@ def start_fill(loop, seconds = 10):
     status_widget.set_text(f"{TITLE} {STATUS_FRAMES[0]}")
     loop.set_alarm_in(interval, tick, 1)
 
-def build_ui(info):    
+def build_ui(info, container_instance=None, ssh_info=None):
     used_secs = info["used"]["walltime"]
     req_secs = info["requested"]["walltime"]
     cpu_pct = info["used"]["cpu"]
@@ -104,6 +105,13 @@ def build_ui(info):
 
         ssh = [uw.Text("")]
         ssh.extend(command("SSH command:", f"ssh -X {user}@{hostname}"))
+        if container_instance:
+            join_flag = "--userns " if ssh_info and ssh_info.get("userns") else ""
+            remote = f"module load apptainer && apptainer shell {join_flag}{shlex.quote('instance://' + container_instance)}"
+            target = shlex.quote(f"{user}@{hostname}")
+            ssh.extend(command("Container shell:", f"ssh -t {target} {shlex.quote(remote)}"))
+        if ssh_info:
+            ssh.append(uw.Text("VS Code SSH: run job ssh-config on the login node."))
         ssh.extend(command("SSH tunnel:", f"ssh -L 8080:127.0.0.1:8080 {user}@{hostname}"))
         ssh.extend(command("Remote-ssh:", f"--remote ssh-remote+{hostname} {wd}"))
         ssh.extend(command("Jupyter Lab:", f"ssh -t -L 8080:127.0.0.1:8080 {user}@{hostname} \"module load jupyterlab/3.4.3-py3.9 && jupyter lab --no-browser --port=8080\"",))
@@ -152,7 +160,9 @@ def monitor(workbench_file: str):
     job_id = wb.get_job_id(workbench_file)
     def UI(loop = None, data = None):
         info = q.info(job_id)
-        ui = build_ui(info)
+        instance = wb.running_container_instance(workbench_file, job_id) if info["state"] == "R" else None
+        ssh_info = wb.running_container_ssh(workbench_file, job_id) if instance else None
+        ui = build_ui(info, instance, ssh_info)
 
         if loop is None:
             loop = uw.MainLoop(ui, palette = palette, handle_mouse = False)
