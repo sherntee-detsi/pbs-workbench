@@ -8,22 +8,24 @@ from job import places as ps
 PALETTE = [
     ("label", "light gray", "default"),
 ]
-PROJECT = os.environ["PROJECT"]
+PROJECT = os.environ.get("PROJECT", "")
 
 QUEUES = ["normal", "normalbw", "bigmem", "bigmembw"]
 
 DEFAULT_CONFIG = {
     "queue": QUEUES[0],
     "name": "default",
-    "project": PROJECT,
     "resources": {
         "ncpus": "8",
         "mem": "32GB",
         "walltime": "8:00:00",
         "jobfs": "200GB",
-        "storage": [f"scratch/{PROJECT}", f"gdata/{PROJECT}"],
+        "storage": [f"scratch/{PROJECT}", f"gdata/{PROJECT}"] if PROJECT else [],
     },
 }
+
+if PROJECT:
+    DEFAULT_CONFIG["project"] = PROJECT
 
 def WithLabel(label, widget):
     return (uw.Text(("label", label + " ")), widget)
@@ -118,9 +120,10 @@ class ProfileEditor:
     def __init__(self, config: dict):
         self.exit_message = None
         resources = config.get("resources", DEFAULT_CONFIG["resources"])
+        self.saved_project = config.get("project")
 
         self.name = EditEnter("", config.get("name", ""))
-        self.project = EditEnter("", config.get("project", DEFAULT_CONFIG["project"]))
+        self.project = EditEnter("", config.get("project", PROJECT)) if PROJECT else None
         self.ncpus = EditEnter(
             "", resources.get("ncpus", DEFAULT_CONFIG["resources"]["ncpus"])
         )
@@ -156,18 +159,20 @@ class ProfileEditor:
         div = uw.Divider("─")
         header = [div, uw.Text("PBS Workbench Profile Editor", align="center"), div]
 
-        body = Table(
-            [
-                WithLabel("Name:", self.name),
-                WithLabel("Queue:", queue_column),
-                WithLabel("Project:", self.project),
-                WithLabel("CPUs:", self.ncpus),
-                WithLabel("RAM:", self.mem),
-                WithLabel("Walltime:", self.walltime),
-                WithLabel("Jobfs:", self.jobfs),
-                WithLabel("Storage:", self.storage),
-            ]
-        )
+        rows = [
+            WithLabel("Name:", self.name),
+            WithLabel("Queue:", queue_column),
+        ]
+        if self.project is not None:
+            rows.append(WithLabel("Project:", self.project))
+        rows.extend([
+            WithLabel("CPUs:", self.ncpus),
+            WithLabel("RAM:", self.mem),
+            WithLabel("Walltime:", self.walltime),
+            WithLabel("Jobfs:", self.jobfs),
+            WithLabel("Storage:", self.storage),
+        ])
+        body = Table(rows)
 
         ui = []
         ui.extend(header)
@@ -236,15 +241,22 @@ class ProfileEditor:
                 self.loop.widget = overlay
                 return
 
-        config = DEFAULT_CONFIG
-        config["name"] = self.name.get_edit_text()
-        config["project"] = self.project.get_edit_text()
-        config["queue"] = self.queue.get_value()
-        config["resources"]["ncpus"] = self.ncpus.get_edit_text()
-        config["resources"]["mem"] = self.mem.get_edit_text()
-        config["resources"]["walltime"] = self.walltime.get_edit_text()
-        config["resources"]["jobfs"] = self.jobfs.get_edit_text()
-        config["resources"]["storage"] = self.storage.get_edit_text().split("+")
+        config = {
+            "name": self.name.get_edit_text(),
+            "queue": self.queue.get_value(),
+            "resources": {
+                "ncpus": self.ncpus.get_edit_text(),
+                "mem": self.mem.get_edit_text(),
+                "walltime": self.walltime.get_edit_text(),
+                "jobfs": self.jobfs.get_edit_text(),
+            },
+        }
+        project = self.project.get_edit_text() if self.project is not None else self.saved_project
+        if project:
+            config["project"] = project
+        storage = self.storage.get_edit_text()
+        if storage:
+            config["resources"]["storage"] = storage.split("+")
 
         with open(path, "w") as f:
             f.writelines(json.dumps(config, indent = 4))

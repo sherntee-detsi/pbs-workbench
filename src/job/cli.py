@@ -118,6 +118,7 @@ def end():
 def profile(profile: str = typer.Argument("default", shell_complete=complete_profiles)):
     """Create or modify a job profile interactively"""
     import json
+    from copy import deepcopy
     from job import workbench as wb
     from job import profile_editor
 
@@ -127,7 +128,7 @@ def profile(profile: str = typer.Argument("default", shell_complete=complete_pro
         if profile_file is not None:
             config = wb.parse_old_profile(profile_file)
         else:
-            config = profile_editor.DEFAULT_CONFIG
+            config = deepcopy(profile_editor.DEFAULT_CONFIG)
 
         config["name"] = profile
     else:
