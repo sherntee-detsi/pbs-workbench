@@ -177,5 +177,5 @@ pyrightconfig.json
 
 
 .vscode
-job
+/job
 logs/

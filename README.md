@@ -35,6 +35,16 @@ This is a requirement if you want to to use the [vscode extension](https://githu
 
 Note that this was compiled on gadi and it's not tested in any other platform.
 
+### uv
+
+With [uv](https://docs.astral.sh/uv/) installed, install the `job` command from GitHub:
+
+```sh
+uv tool install git+https://github.com/sherntee-detsi/pbs-workbench.git
+```
+
+The package requires Python 3.12 or newer.
+
 ### pipx
 
 Alternatively alternatively, you can install it with pipx.
